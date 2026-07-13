@@ -1,0 +1,53 @@
+# Stage 2: GRPO with Scattered Mask (更激进：至少mask 3步)
+# 目标：学习更强的压缩
+
+# 模型配置 - 从Stage1 v2继续（使用Phase1代码重训的正确版本）
+base_model: "models/stage1/final_model"
+cache_dir: "./hf_cache"
+
+# 数据配置
+train_data_path: "data/phase1_unified_clean.jsonl"
+max_sequence_length: 1536  # 减少以节省显存
+start_index: 2000
+end_index: 4000  # 使用2000-4000条数据
+
+# Mask配置 - Stage2: 更激进，至少mask 3步
+mask_probability: 0.50  # 提高到50%
+min_mask_steps: 3       # 核心参数：至少mask 3步！（从2增加到3）
+shuffle_steps: false    # 不shuffle
+mask_mode: "scattered"  # 随机分散mask
+
+# GRPO参数
+training_mode: "grpo"
+num_epochs: 3
+train_batch_size: 1
+gradient_accumulation_steps: 8  # 增加累积以保持有效batch size
+learning_rate: 0.00001
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+# GRPO特定参数 (显存优化)
+num_samples_per_prompt: 2   # 减少到2以节省显存 (原4)
+ppo_epochs: 4               # PPO更新轮数
+kl_coef: 0.1                # KL散度系数
+clip_range: 0.2             # PPO clip范围
+
+# 奖励设计（真实实现见 scripts/train_grpo.py::RewardCalculator.calculate）
+# - 答案错误：-2.0
+# - 答案正确但格式不完整：-1.0
+# - 答案与格式都正确：1.0 + step_bonus + token_reward
+#   step_bonus = 0.3 * min(减少的步骤数, 3)，最高 0.9
+#   token baseline = 原始步骤数 * 35 words，80% 为目标线：
+#     超过 baseline：每多 1 word 扣 0.01，最低 -1.0
+#     位于 80%-100%：每高于目标线 1 word 扣 0.002
+#     不超过 80%：每少 1 word 加 0.001，最高 +0.2
+
+# 日志和保存
+logging_steps: 10
+save_steps: 50
+output_dir: "models/stage2"
+logging_dir: "logs/stage2"
+
+# 其他
+use_fp16: true
+seed: 42
